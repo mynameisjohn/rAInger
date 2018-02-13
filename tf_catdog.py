@@ -1,8 +1,8 @@
 # Tensorflow / tflearn catdog example
 # Unceremoniously lifted from this example from Medium.com, of all places...
 # https://medium.com/@curiousily/tensorflow-for-hackers-part-iii-convolutional-neural-networks-c077618e590b
-
 # builtins
+import time
 import os         
 import random
 
@@ -56,6 +56,7 @@ parser.add_argument('-cm', '--clean_model', type=bool, default=False, help='Dele
 # for a prediction using the trained model
 # If this is off we use what's in the test directory
 parser.add_argument('--cam', type=bool, default=True, help='Use camera as prediction input')
+parser.add_argument('--min_detect', type=int, default=500, help="minimum motion detection area size")
 
 # get arguments
 args = parser.parse_args()
@@ -116,10 +117,10 @@ def create_label(image_name):
 
 # Make sure image is right size, grey, convert to np array
 def fmt_img(img_data):
-    img_data = cv2.resize(img_data, (IMG_SIZE, IMG_SIZE))
-    if len(img_data.shape) > 2 and img_data.shape[2] == 3:
-        img_data = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY)
-    return np.array(img_data).reshape(IMG_SIZE, IMG_SIZE, 1)
+    ret = cv2.resize(img_data, (IMG_SIZE, IMG_SIZE))
+    if len(ret.shape) > 2 and ret.shape[2] == 3:
+        ret = cv2.cvtColor(ret, cv2.COLOR_BGR2GRAY)
+    return np.array(ret).reshape(IMG_SIZE, IMG_SIZE, 1)
 
 # parallel executor function, loads an image as gray
 def load_img(imgPath):
@@ -253,25 +254,66 @@ if args.cam:
     cap = cv2.VideoCapture(0)
     if cap.isOpened():
         print('Camera successfully opened')
-        print('Press space to capture images and Q to exit')
+
+        # If there is motion, record a list of frames
+        bMotion = False
+        lastFrame = None
+        dilKern = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
         while True:
-            # Quit if they press 'Q'
+            # Read a frame, convert frame to gray
             ret, frame = cap.read()
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Detect motion
+            bMotionDetected = False
+            blur = cv2.GaussianBlur(frame, (21,21), 0)
+
+            # Store previous frame if we don't yet have one
+            if lastFrame is None:
+                lastFrame = blur
+                continue
+
+            # Detect diff betwen frame and find contours
+            deltaFrame = cv2.absdiff(lastFrame, blur)
+            lastFrame = blur
+            ret, thresh = cv2.threshold(deltaFrame, 25, 255, cv2.THRESH_BINARY)
+            dilate = cv2.dilate(thresh, None, iterations = 2)
+            _, contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for c in contours:
+                if cv2.contourArea(c) > args.min_detect:
+                    # draw a rectangle around the contour
+                    (x, y, w, h) = cv2.boundingRect(c)
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+                    # If we detect motion we start recording
+                    # this refreshes time and enters branch below
+                    tRecStart = time.time()
+                    bMotion = True
+                    tDur = 40.
+                    break
+            
+            if bMotion:
+                # Stop recording when we hit dur
+                # (maybe refresh if motion still detected)
+                if time.time() < tRecStart + tDur:
+                    bMotion = False
+                    bMotionDone = True
+                else:
+                    # Our operations on the frame come here
+                    img = fmt_img(frame)
+                    
+                    # Run prediction model on image
+                    prediction = model.predict([img])[0]
+
+                    # Find the frame with the strongest
+                    # dog or cat possibility and store it
+
+            # Show frame
             cv2.imshow('Camera', frame)
             key = cv2.waitKey(1)
             if key & 0xFF == ord('q'):
                 cap.release()
                 exit()
-            # Capture frame and catdog
-            else:
-                # Our operations on the frame come here
-                img = fmt_img(frame)
-                
-                # Run prediction model on image
-                prediction = model.predict([img])[0]
-                # print(prediction)
-                print('I think it\'s a', ['cat','dog'][np.argmax(prediction)])
-
     else:
         print('Unable to open camera, defaulting to test data set')
 
