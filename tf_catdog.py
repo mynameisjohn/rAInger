@@ -44,11 +44,18 @@ parser.add_argument('--test_data_file', type = str, help='The cached test file d
 parser.add_argument('--num_filters', type=int, default=32, help='The number of convolution filters used')
 parser.add_argument('--filter_size', type=int, default=5, help='The size of the convolution filters used')
 parser.add_argument('--num_neurons', type=int, default=1024, help='The count of fully connected neurons')
+parser.add_argument('--lr', type=float, default=1e-3, help='Learn Rate')
+parser.add_argument('--n_epoch', type=int, default=10, help='Learn Rate')
 parser.add_argument('--model_file', type=str, help='The cached model file')
 
 # Clean cached files
 parser.add_argument('-ci', '--clean_images', type=bool, default=False, help='Delete any cached data files')
 parser.add_argument('-cm', '--clean_model', type=bool, default=False, help='Delete any cached data files')
+
+# Decision threshold
+# For the live camera mode, if the prediction value
+# exceeds this threshold then it's a match
+parser.add_argument('-thresh', type=float, default=0.5)
 
 # Camera mode
 # if this is on, opencv is used to open the default camera. 
@@ -56,6 +63,7 @@ parser.add_argument('-cm', '--clean_model', type=bool, default=False, help='Dele
 # for a prediction using the trained model
 # If this is off we use what's in the test directory
 parser.add_argument('--cam', type=bool, default=True, help='Use camera as prediction input')
+parser.add_argument('--motion', type=bool, default=False, help='Require motion for camera prediction')
 parser.add_argument('--min_detect', type=int, default=500, help="minimum motion detection area size")
 
 # get arguments
@@ -154,7 +162,7 @@ def create_data(strDir, strFile, bTrain):
     np.save(strFullPath, data)
     return data
 
-def create_net():
+def create_net(bTrain):
     # Create layer graph
     # Each block here creates a new layer in the network
     tf.reset_default_graph()
@@ -195,17 +203,21 @@ def create_net():
     KEEP_THRESH = 0.8
     convnet = dropout(convnet, KEEP_THRESH)
 
-    # Create another fully connected layer - I'm not sure why it's softmax
-    convnet = fully_connected(convnet, 2, activation='softmax')
-
-    # The regression step is a gradient descent - I think the LR is the
-    # step size, and I assume it gets followed until something goes to zero?
-    LR = 1e-3
-    convnet = regression(convnet, optimizer='adam', learning_rate=LR, loss='categorical_crossentropy', name='targets')
+    # Create another fully connected layer
+    if bTrain:
+        # We use a softmax for training because it more quickly approaces the truth
+        convnet = fully_connected(convnet, 2, activation='softmax')
+        # The regression step is a gradient descent - I think the LR is the
+        # step size, and I assume it gets followed until something goes to zero?
+        convnet = regression(convnet, optimizer='adam', learning_rate=args.lr, loss='categorical_crossentropy', name='targets')
+    else:
+        # We could use a softmax here, but it's more valuable
+        # to know if we aren't seeing anything useful
+        convnet = fully_connected(convnet, 2, activation='relu')
     return convnet
 
+# create training validation data from original training set
 train_data = create_data(TRAIN_DIR, TRAIN_DATA_FILE, True)
-
 if len(train_data) < args.num_validate:
     raise RuntimeError('Error: not enough validation files!')
 
@@ -226,19 +238,17 @@ Y_test = np.array([i[1] for i in model_test])
 # Try loading model, or retrain if needed
 try:
     # Construct the neural network (what was it before?)
-    convnet = create_net()
-    model = tflearn.DNN(convnet, tensorboard_dir='log', tensorboard_verbose=0)
+    predictModel = tflearn.DNN(create_net(False), tensorboard_dir='log', tensorboard_verbose=0)
     # see if we can load the model from disk
-    model.load(MODEL_NAME)
+    predictModel.load(MODEL_NAME)
 except tf.errors.NotFoundError:
     # It seems like that error ends the tensorflow session, so
     # reconstruct the net and model to start a new session and learn
-    convnet = create_net()
-    model = tflearn.DNN(convnet, tensorboard_dir='log', tensorboard_verbose=0)
-    model.fit(
+    learnModel = tflearn.DNN(create_net(True), tensorboard_dir='log', tensorboard_verbose=0)
+    learnModel.fit(
         {'input': X_train},
         {'targets': Y_train},
-        n_epoch=10,
+        n_epoch=args.n_epoch,
         validation_set = (
             {'input': X_test},
             {'targets': Y_test}), 
@@ -246,7 +256,11 @@ except tf.errors.NotFoundError:
         show_metric=True,
         run_id=MODEL_NAME)
     # Save the learned model
-    model.save(MODEL_NAME)
+    learnModel.save(MODEL_NAME)
+
+    predictModel = tflearn.DNN( create_net(False), tensorboard_dir='log', tensorboard_verbose=0)
+    # see if we can load the model from disk
+    predictModel.load(MODEL_NAME)
 
 # if we are using the camera then open it and wait for input
 # press Q to close
@@ -257,45 +271,50 @@ if args.cam:
 
         # If there is motion, record a list of frames
         bMotion = False
+        tRecStart = 0.
+        tDur = 40.
         lastFrame = None
         dilKern = cv2.getStructuringElement(cv2.MORPH_RECT,(5,5))
         while True:
-            # Read a frame, convert frame to gray
+            # Read frame
             ret, frame = cap.read()
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Detect motion
-            bMotionDetected = False
-            blur = cv2.GaussianBlur(frame, (21,21), 0)
+            # If we require motion detection, detect motion
+            if args.motion:
+                # Convert frame to gray
+                input = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Store previous frame if we don't yet have one
-            if lastFrame is None:
+                # Detect motion
+                bMotionDetected = False
+                blur = cv2.GaussianBlur(input, (21,21), 0)
+
+                # Store previous frame if we don't yet have one
+                if lastFrame is None:
+                    lastFrame = blur
+                    continue
+
+                # Detect diff betwen frame and find contours
+                deltaFrame = cv2.absdiff(lastFrame, blur)
                 lastFrame = blur
-                continue
+                ret, thresh = cv2.threshold(deltaFrame, 25, 255, cv2.THRESH_BINARY)
+                dilate = cv2.dilate(thresh, None, iterations = 2)
+                _, contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for c in contours:
+                    if cv2.contourArea(c) > args.min_detect:
+                        # draw a rectangle around the contour
+                        (x, y, w, h) = cv2.boundingRect(c)
+                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-            # Detect diff betwen frame and find contours
-            deltaFrame = cv2.absdiff(lastFrame, blur)
-            lastFrame = blur
-            ret, thresh = cv2.threshold(deltaFrame, 25, 255, cv2.THRESH_BINARY)
-            dilate = cv2.dilate(thresh, None, iterations = 2)
-            _, contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for c in contours:
-                if cv2.contourArea(c) > args.min_detect:
-                    # draw a rectangle around the contour
-                    (x, y, w, h) = cv2.boundingRect(c)
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-
-                    # If we detect motion we start recording
-                    # this refreshes time and enters branch below
-                    tRecStart = time.time()
-                    bMotion = True
-                    tDur = 40.
-                    break
+                        # If we detect motion we start recording
+                        # this refreshes time and enters branch below
+                        tRecStart = time.time()
+                        bMotion = True
+                        break
             
-            if bMotion:
-                # Stop recording when we hit dur
-                # (maybe refresh if motion still detected)
-                if time.time() < tRecStart + tDur:
+            # If we don't care about motion or if there was motion, do preddiction
+            if not args.motion or bMotion:
+                # Stop recording when we hit dur for motion detect
+                if not args.motion and time.time() < tRecStart + tDur:
                     bMotion = False
                     bMotionDone = True
                 else:
@@ -303,13 +322,21 @@ if args.cam:
                     img = fmt_img(frame)
                     
                     # Run prediction model on image
-                    prediction = model.predict([img])[0]
+                    prediction = predictModel.predict([img])[0]
 
                     # Find the frame with the strongest
                     # dog or cat possibility and store it
+                    print(prediction)
+                    # if prediction[np.argmax(prediction)] > args.thresh:
+                    #     print('I think it\'s a', ['cat', 'dog'][np.argmax(prediction)])
+                    #     # TODO send data over LoRaWAN node
+                    # else:
+                    #     print('Doesn\'t look like anything to me...')
 
             # Show frame
             cv2.imshow('Camera', frame)
+
+            # Quit if 'q' is pressed
             key = cv2.waitKey(1)
             if key & 0xFF == ord('q'):
                 cap.release()
@@ -330,7 +357,7 @@ for num in range(16):
     y = fig.add_subplot(4, 4, num+1)
     orig = img_data.reshape(IMG_SIZE, IMG_SIZE)
     # data = img_data.reshape(IMG_SIZE, IMG_SIZE, 1)
-    model_out = model.predict([img_data])[0]
+    model_out = predictModel.predict([img_data])[0]
     
     if np.argmax(model_out) == 1: 
         str_label='Dog'
