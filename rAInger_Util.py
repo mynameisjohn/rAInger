@@ -216,14 +216,22 @@ class cvMotionDetector:
         _, contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         # Walk contours
+        maxRect = None
+        maxArea = self.min_detect
         for c in contours:
             # If the contour area exceeds our detection threshold, return true
-            if cv2.contourArea(c) > self.min_detect:
-                # draw a rectangle around the contour if desired
-                if bDrawRect:
-                    (x, y, w, h) = cv2.boundingRect(c)
-                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                return True
+            contourArea = cv2.contourArea(c)
+            if contourArea > maxArea:
+                self.min_detect = contourArea
+                maxRect = cv2.boundingRect(c)
+
+        # If we got any rect, return True
+        if maxRect is not None:
+            # draw a rectangle around the contour if desired
+            if bDrawRect:
+                (x, y, w, h) = maxRect
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            return True
 
         return False
 
@@ -244,10 +252,11 @@ class cvVideoSrc:
 # cvGIFSrc opens a GIF file with PIL and streams images
 # use PIL to load an array of images and 
 class cvGIFSrc:
-    def __init__(self, strGif):
+    def __init__(self, strGif, bLoop = False):
         try:
             self.gifImage = PIL.Image.open(args.gif)
             self.ixCurrent = 0
+            self.bLoop = bLoop
         except IOError:
             print('Unable to open GIF file', strGif)
     def getFrame(self):
@@ -261,7 +270,7 @@ class cvGIFSrc:
                 return (True, cvImg)
             except EOFError:
                 # loop back to zero... unless this was zero alrady
-                if self.ixCurrent > 0:
+                if self.bLoop and self.ixCurrent > 0:
                     self.ixCurrent = 0
                     return self.getFrame()
         # If we end up here for any reason then we're done
@@ -272,7 +281,7 @@ class cvGIFSrc:
 # The function takes raw bytes and sends them over our
 # radio to whichever gateway it's connected to
 def send_lora_data(data):
-    if not isinstance(data, bytes):
+    if not (isinstance(data, bytes) or isinstance(data, bytearray)):
         raise RuntimeError('We can only send bytes over LoRaWAN')
     try:
         import pylLoRaWAN

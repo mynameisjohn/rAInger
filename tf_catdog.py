@@ -7,6 +7,7 @@
 import time
 import os         
 import random
+from collections import namedtuple
 
 # OpenCV and numpy
 import cv2
@@ -126,12 +127,14 @@ except (IOError, RuntimeError) as e:
 # press Q to close
 if imgStream is not None:
     # If we detect motion, we will record a series of frames 
-    # and find the frame with the strongest prediction
+    # and find the frame with the strongest prediction. We'll
+    # cache these and send the best predictions over LoRaWAN
     if args.motion:
         tRecStart = 0.
         motionDetector = rAI.cvMotionDetector(args.min_detect)
+        BestPrediction = namedtuple('BestPrediction', {'strength', 'index', 'image'})
         bestPrediction = None
-        detectedPredictions = []
+        liBestPredictions = []
 
     # If we don't care about motion detection, always do prediction
     bDoPrediction = not args.motion
@@ -150,11 +153,12 @@ if imgStream is not None:
             if motionDetector.detect(frame, True):
                 tRecStart = time.time()
                 bDoPrediction = True
-            # If no motion is detected and we exceed the timer, turn off prediction
-            # Add best prediction we got during this period to the list of detected objects
-            elif bDoPrediction and time.time() < (tRecStart + args.motion_window):
+            # If no motion is detected and we exceed the timer, turn off prediction and
+            # add best prediction we got during this period to the list of detected objects
+            elif bDoPrediction and time.time() > (tRecStart + args.motion_window):
                 if bestPrediction:
-                    detectedPredictions.append(bestPrediction)
+                    liBestPredictions.append(bestPrediction)
+                    bestPrediction = None
                 bDoPrediction = False
                 print('No motion detected')
 
@@ -165,29 +169,44 @@ if imgStream is not None:
             prediction = model.predict(modelInput)[0]
             if args.motion:
                 # bestPrediction is a tuple(predictionVal, maxIdx, frame)
-                # The maxIdx will be 0 for cats and 1 for dogs
+                # The maxIdx will be 0 for cats and 1 for dogs. Assign it
+                # if it's our first or take the one with the stronger max element
                 if not bestPrediction:
-                    bestPrediction = (prediction, np.argmax(prediction), frame)
-                elif np.max(bestPrediction[0]) < np.max(prediction[0]):
-                    bestPrediction = (prediction, np.argmax(prediction), frame)
-                    print('best', np.max(bestPrediction[0]))
+                    bestPrediction = BestPrediction(prediction, np.argmax(prediction), frame)
+                elif np.max(bestPrediction.strength) < np.max(prediction[0]):
+                    bestPrediction = BestPrediction(prediction, np.argmax(prediction), frame)
+                    # print('best', np.max(bestPrediction.strength))
+
+            # What do we think is in this frame?
             if prediction[np.argmax(prediction)] > args.thresh:
                 print('I think it\'s a', ['cat', 'dog'][np.argmax(prediction)])
-                # TODO send data over LoRaWAN node
             else:
                 print('Doesn\'t look like anything to me...')
             # print(prediction)
 
         # Show frame
-        cv2.imshow('Video', frame)
+        cv2.imshow('Predicting...', frame)
+
+        # Advance frame by frame if in GIF mode
+        key = cv2.waitKey(0 if args.gif else 1)
 
         # Quit if 'q' is pressed
-        # Advance frame by frame if in GIF mode
-        key = cv2.waitKey(0 if args.gif else 0)
         if key & 0xFF == ord('q'):
             cv2.destroyAllWindows()
             break
+
+    # If we broke out and there was one more
+    # "best prediction", add it too
+    if bestPrediction:
+        liBestPredictions.append(bestPrediction)
+
+    # For every "best prediction" we had, send its data over the antenna
+    # (the index member is the max arg, 0 for cat and 1 for dog)
+    detectBytes = bytearray([bp.index for bp in liBestPredictions])
+    rAI.send_lora_data(detectBytes)
+
 # Run the code on some test data, if it exists, and plot the output
+# This is taken from the Medium example, and is a useful network validator
 else:
     test_data = rAI.create_data(args.test_dir, args.test_data_file, False)
     fig = plt.figure(figsize=(16, 12))
