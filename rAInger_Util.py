@@ -9,6 +9,8 @@ import concurrent.futures
 import cv2
 import numpy as np
 
+import PIL
+
 # Tensorflow and tflearn
 import tensorflow as tf
 import tflearn
@@ -58,7 +60,14 @@ def get_arguments():
     # for a prediction using the trained model
     # If this is off we use what's in the test directory
     parser.add_argument('--cam', type=bool, default=True, help='Use camera as prediction input')
-    parser.add_argument('--motion', type=bool, default=False, help='Require motion for camera prediction')
+    
+    # GIF mode
+    # Instead of using the camera, use PIL to load a .GIF file
+    # (i'm using this one https://giphy.com/gifs/cat-moment-remember-8vQSQ3cNXuDGo)
+    # This will be used if not None before checking camera
+    parser.add_argument('--gif', type=str, help='Use camera as prediction input', default='cat.gif')
+    
+    parser.add_argument('--motion', type=bool, default=True, help='Require motion for camera prediction')
     parser.add_argument('--motion_window', type=float, default=40., help="Duration in seconds of our motion detection window")
     parser.add_argument('--min_detect', type=int, default=500, help="minimum motion detection area size")
 
@@ -189,17 +198,19 @@ def create_net(bTrain):
 class cvMotionDetector:
     lastFrame = None
     def __init__(self, min_detect, blurKernDim = 21, dropThresh = 25):
+        self.min_detect = min_detect
         self.blurKernDim = (blurKernDim, blurKernDim)
         self.dropThresh = dropThresh
 
     def detect(self, frame, bDrawRect = False):
-        blur = cv2.GaussianBlur(frame, self.blurKernDim, 0)
+        input = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(input, self.blurKernDim, 0)
         if self.lastFrame is None:
             self.lastFrame = blur
             return False
         # Detect diff betwen frame and find contours
-        deltaFrame = cv2.absdiff(lastFrame, blur)
-        lastFrame = blur
+        deltaFrame = cv2.absdiff(self.lastFrame, blur)
+        self.lastFrame = blur
         ret, thresh = cv2.threshold(deltaFrame, 25, 255, cv2.THRESH_BINARY)
         dilate = cv2.dilate(thresh, None, iterations = 2)
         _, contours, _ = cv2.findContours(dilate, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -215,3 +226,58 @@ class cvMotionDetector:
                 return True
 
         return False
+
+# cvVideoSrc is a light wrapper over a VideoCapture
+# I made it so I could use this interchangeably
+# with the cvGIFSrc class below
+class cvVideoSrc:
+    def __init__(self, idx):
+        # Destructor should release camera
+        self.cam = cv2.VideoCapture(idx)
+        if self.cam.isOpened():
+            print('Successfully opened camera')
+        else:
+            raise RuntimeError('Unable to open camera')
+    def getFrame(self):
+        return self.cam.read()
+
+# cvGIFSrc opens a GIF file with PIL and streams images
+# use PIL to load an array of images and 
+class cvGIFSrc:
+    def __init__(self, strGif):
+        try:
+            self.gifImage = PIL.Image.open(args.gif)
+            self.ixCurrent = 0
+        except IOError:
+            print('Unable to open GIF file', strGif)
+    def getFrame(self):
+        if self.gifImage:
+            # Try to get current GIF image
+            try:
+                self.gifImage.seek(self.ixCurrent)
+                cvImg = np.array(self.gifImage.convert('RGB'))
+                cvImg = cv2.cvtColor(cvImg, cv2.COLOR_RGB2BGR)
+                self.ixCurrent += 1
+                return (True, cvImg)
+            except EOFError:
+                # loop back to zero... unless this was zero alrady
+                if self.ixCurrent > 0:
+                    self.ixCurrent = 0
+                    return self.getFrame()
+        # If we end up here for any reason then we're done
+        return (False, None)
+
+# When using the LoRaWAN antenna we go through PyLiaison
+# (a utility for invoking C++ code from python)
+# The function takes raw bytes and sends them over our
+# radio to whichever gateway it's connected to
+def send_lora_data(data):
+    if not isinstance(data, bytes):
+        raise RuntimeError('We can only send bytes over LoRaWAN')
+    try:
+        import pylLoRaWAN
+    except ModuleNotFoundError:
+        print('Error: the send_lora_data function can only be invoked when run through PyLiaison')
+        return False
+    # Invoke the pyliaison function
+    return pylLoRaWAN.send_lora_data(data)

@@ -12,6 +12,9 @@ import random
 import cv2
 import numpy as np
 
+# PIL to read my cat GIF
+import PIL
+
 # For final plot
 import matplotlib.pyplot as plt
 
@@ -26,10 +29,12 @@ from tflearn.layers.estimator import regression
 import concurrent.futures
 
 # Our util functions
-from rAInger_Util import *
+import rAInger_Util as rAI
 
 # get arguments
-args = get_arguments()
+# These arguments control just about every 
+# configurable parameter that gets used here
+args = rAI.get_arguments()
 
 # Training and test data file storage\
 # If it isn't specified, construct a name for it
@@ -50,17 +55,16 @@ else:
     
 # Maybe delete cached data
 if args.clean_images:
-    rmFile(os.path.join(args.train_dir, args.train_data_file))
-    rmFile(os.path.join(args.test_dir, args.test_data_file))
+    rAI.rmFile(os.path.join(args.train_dir, args.train_data_file))
+    rAI.rmFile(os.path.join(args.test_dir, args.test_data_file))
 if args.clean_model:
-    for file in os.listdir(os.getcwd()):
-        if file.find(args.model_file) >= 0:
-            rmFile(file)
+    if args.model_file in set(os.listdir(os.getcwd())):
+        rAI.rmFile(args.model_file)
 
 # Try loading a cached model from disk
 try:
     # The argument of create_net determines if the network is for learning or training
-    model = tflearn.DNN(create_net(False), tensorboard_dir='log', tensorboard_verbose=0)
+    model = tflearn.DNN(rAI.create_net(False), tensorboard_dir='log', tensorboard_verbose=0)
     model.load(args.model_file)
     print('Using cached network model', args.model_file)
 
@@ -69,7 +73,7 @@ except tf.errors.NotFoundError:
     print('Unable to load cached network model', args.model_file, ', retraining...')
 
     # create training data from images
-    train_data = create_data(args.train_dir, args.train_data_file, True)
+    train_data = rAI.create_data(args.train_dir, args.train_data_file, True)
     if len(train_data) < args.num_validate:
         raise RuntimeError('Error: not enough validation files!')
 
@@ -87,7 +91,7 @@ except tf.errors.NotFoundError:
 
     # It seems like the NotFoundError ends the tensorflow session, so
     # reconstruct the net and model to start a new session
-    model = tflearn.DNN(create_net(True), tensorboard_dir='log', tensorboard_verbose=0)
+    model = tflearn.DNN(rAI.create_net(True), tensorboard_dir='log', tensorboard_verbose=0)
     
     # Train the model 
     model.fit(
@@ -105,102 +109,117 @@ except tf.errors.NotFoundError:
     model.save(args.model_file)
 
     # Assign the model's net to a prediction net, rather than a learn net
-    model.net = create_net(False)
+    model.net = rAI.create_net(False)
+
+# If we have a gif argument, conver tall frames to a list of cvImages
+imgStream = None
+try:
+    if args.gif is not None:
+        imgStream = rAI.cvGIFSrc(args.gif)
+    elif args.cam:
+        imgStream = rAI.cvVideoSrc(0)
+except (IOError, RuntimeError) as e:
+    print('Unable to open video source')
+    imgStream = None
 
 # if we are using the camera then open it and wait for input
 # press Q to close
-if args.cam:
-    # Open default camera
-    cap = cv2.VideoCapture(0)
-    if cap.isOpened():
-        print('Camera successfully opened')
+if imgStream is not None:
+    # If we detect motion, we will record a series of frames 
+    # and find the frame with the strongest prediction
+    if args.motion:
+        tRecStart = 0.
+        motionDetector = rAI.cvMotionDetector(args.min_detect)
+        bestPrediction = None
+        detectedPredictions = []
 
-        # If we detect motion, we will record a series of frames 
-        # and find the frame with the strongest prediction
+    # If we don't care about motion detection, always do prediction
+    bDoPrediction = not args.motion
+
+    # Read frames from the camera
+    hasFrames = True
+    while hasFrames:
+        hasFrames, frame = imgStream.getFrame()
+        if not hasFrames:
+            break
+
+        # Maybe detect motion
         if args.motion:
-            tRecStart = 0.
-            motionDetector = cvMotionDetector(args.min_detect)
-            bestPrediction = None
+            # If we detect motion, cache current time
+            # This will start or refresh record timer
+            if motionDetector.detect(frame, True):
+                tRecStart = time.time()
+                bDoPrediction = True
+            # If no motion is detected and we exceed the timer, turn off prediction
+            # Add best prediction we got during this period to the list of detected objects
+            elif bDoPrediction and time.time() < (tRecStart + args.motion_window):
+                if bestPrediction:
+                    detectedPredictions.append(bestPrediction)
+                bDoPrediction = False
+                print('No motion detected')
 
-        # If we don't care about motion detection, always do prediction
-        bDoPrediction = not args.motion
-
-        # Read frames from the camera
-        while True:
-            ret, frame = cap.read()
-
-            # Maybe detect motion
+        # If we are doing prediction
+        if bDoPrediction:
+            # Run prediction model on image
+            modelInput = [rAI.fmt_img(frame)]
+            prediction = model.predict(modelInput)[0]
             if args.motion:
-                # If we detect motion, cache current time
-                # This will start or refresh record timer
-                if motionDetector.detect(frame, True):
-                    tRecStart = time.time()
-                    bDoPrediction = True
-                # If no motion is detected and we exceed the timer, turn off prediction
-                elif bDoPrediction and time.time() < (tRecStart + args.motion_window):
-                    bDoPrediction = False
+                # bestPrediction is a tuple(predictionVal, maxIdx, frame)
+                # The maxIdx will be 0 for cats and 1 for dogs
+                if not bestPrediction:
+                    bestPrediction = (prediction, np.argmax(prediction), frame)
+                elif np.max(bestPrediction[0]) < np.max(prediction[0]):
+                    bestPrediction = (prediction, np.argmax(prediction), frame)
+                    print('best', np.max(bestPrediction[0]))
+            if prediction[np.argmax(prediction)] > args.thresh:
+                print('I think it\'s a', ['cat', 'dog'][np.argmax(prediction)])
+                # TODO send data over LoRaWAN node
+            else:
+                print('Doesn\'t look like anything to me...')
+            # print(prediction)
 
-            # If we are doing prediction
-            if bDoPrediction:
-                # Run prediction model on image
-                modelInput = [fmt_img(frame)]
-                prediction = model.predict(modelInput)[0]
-                if args.motion:
-                    if bestPrediction is None:
-                        bestPrediction = (prediction, np.argmax(prediction))
-                    elif bestPrediction[0] > prediction:
-                        bestPrediction = (prediction, np.argmax(prediction))
+        # Show frame
+        cv2.imshow('Video', frame)
 
-                if prediction[np.argmax(prediction)] > args.thresh:
-                    print('I think it\'s a', ['cat', 'dog'][np.argmax(prediction)])
-                    # TODO send data over LoRaWAN node
-                else:
-                    print('Doesn\'t look like anything to me...')
-                # print(prediction)
-
-            # Show frame
-            cv2.imshow('Camera', frame)
-
-            # Quit if 'q' is pressed
-            key = cv2.waitKey(1)
-            if key & 0xFF == ord('q'):
-                cap.release()
-                exit()
-    else:
-        print('Unable to open camera, defaulting to test data set')
-
+        # Quit if 'q' is pressed
+        # Advance frame by frame if in GIF mode
+        key = cv2.waitKey(0 if args.gif else 0)
+        if key & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+            break
 # Run the code on some test data, if it exists, and plot the output
-test_data = create_data(args.test_dir, args.test_data_file, False)
-fig = plt.figure(figsize=(16, 12))
-
-# Pick 16 test images at random and see if they're cats or dogs
-setChosen = set()
-for num in range(16):
-    # Make sure the images are unique
-    ixRnd = random.randint(0, len(test_data)) 
-    while ixRnd in setChosen:
-        ixRnd = random.randint(0, len(test_data)) 
-    setChosen.add(ixRnd)
-
-    # Pull test data and unpack
-    data = random.choice(test_data)
-    img_num = data[1]
-    img_data = data[0]
+else:
+    test_data = rAI.create_data(args.test_dir, args.test_data_file, False)
+    fig = plt.figure(figsize=(16, 12))
     
-    # Plot image
-    y = fig.add_subplot(4, 4, num+1)
-    orig = img_data.reshape(args.img_size, args.img_size)
-    y.imshow(orig, cmap='gray')
-    y.axes.get_xaxis().set_visible(False)
-    y.axes.get_yaxis().set_visible(False)
-
-    # Label with prediction
-    model_out = model.predict([img_data])[0]
-    if np.argmax(model_out) == 1: 
-        str_label='Dog'
-    else:
-        str_label='Cat'
-    plt.title(str_label)
-
-# Show plot
-plt.show()
+    # Pick 16 test images at random and see if they're cats or dogs
+    setChosen = set()
+    for num in range(16):
+        # Make sure the images are unique
+        ixRnd = random.randint(0, len(test_data)) 
+        while ixRnd in setChosen:
+            ixRnd = random.randint(0, len(test_data)) 
+        setChosen.add(ixRnd)
+    
+        # Pull test data and unpack
+        data = random.choice(test_data)
+        img_num = data[1]
+        img_data = data[0]
+        
+        # Plot image
+        y = fig.add_subplot(4, 4, num+1)
+        orig = img_data.reshape(args.img_size, args.img_size)
+        y.imshow(orig, cmap='gray')
+        y.axes.get_xaxis().set_visible(False)
+        y.axes.get_yaxis().set_visible(False)
+    
+        # Label with prediction
+        model_out = model.predict([img_data])[0]
+        if np.argmax(model_out) == 1: 
+            str_label='Dog'
+        else:
+            str_label='Cat'
+        plt.title(str_label)
+    
+    # Show plot
+    plt.show()
