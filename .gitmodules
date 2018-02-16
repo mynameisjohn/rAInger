@@ -1,4 +1,0 @@
-[submodule "Pyliaison"]
-	path = Pyliaison
-	url = https://github.com/mynameisjohn/Pyliaison
-	branch = master
