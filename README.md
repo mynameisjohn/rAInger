@@ -1,14 +1,3 @@
-<!--
-<h1 align="center">
-  <br>
-  <a href="http://www.amitmerchant.com/electron-markdownify"><img src="https://raw.githubusercontent.com/amitmerchant1990/electron-markdownify/master/img/markdownify.png" alt="Markdownify" width="200"></a>
-  <br>
-  Markdownify
-  <br>
-<img src="https://media.giphy.com/media/8vQSQ3cNXuDGo/giphy.gif" width="400" height="400" />
-</h1>
--->
-
 # rAInger
 An autonomous wildlife camera <br>
 (<a href="https://challengerocket.com/nvidia">NVIDIA® Jetson™ Developer Challenge</a> submission)
@@ -16,36 +5,47 @@ An autonomous wildlife camera <br>
 
 The goal of this project is to design a program that enables an Nvidia Jetson computer equipped with a camera to autonomously capture and analyze pictures.  These pictures are fed to a convolutional neural network (CNN) trained to recognized various types of animals, allowing the Jetson to independently track wildlife in the field. 
 
-[![rAInger submission video](https://img.youtube.com/vi/ZWR8u-FF0C0/0.jpg)](https://www.youtube.com/watch?v=ZWR8u-FF0C0)
-
 That's the theory, anyway. I don't have easy access to wildlife training set, so my networks are trained on cats and dogs. The high level purpose and design of this program is described further this short video, which I've included as part of my 
 submission. Rather than repeat that information, I'll use this README to describe the actual implementation. 
 
+[![rAInger submission video](https://img.youtube.com/vi/ZWR8u-FF0C0/0.jpg)](https://www.youtube.com/watch?v=ZWR8u-FF0C0)
+
 <br>
-<b>0. File Index</b>
+<b>0. File Index and Libraries</b>
 <br>
 There are three source files in this repository
 <br>
-- rAInger.py - the main script, which runs the code that trains the network and uses it to analyze images <br>
-- rAInger_Util.py - an auxilliary script where most of the functions used in rAInger.py are implemented <br>
-- rAInger_pyl.cpp - A C++ source file that communicates with an onboard radio to transmit analysis data <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger.py">rAInger.py</a> - the main script, which runs the code that trains the network and uses it to analyze images <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py">rAInger_Util.py</a> - an auxilliary script where most of the functions used in rAInger.py are implemented <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_pyl.cpp">rAInger_pyl.cpp</a> - A C++ source file that communicates with an onboard radio to transmit analysis data <br>
 
 Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
+<br>
+
+The python code uses the following libraries
+<br>
+- <a href="http://www.numpy.org/">numpy</a> (array and math operations) <br>
+- <a href="https://opencv.org">opencv</a> (for image IO and processing) <br>
+- <a href="http://www.pythonware.com/products/pil">PIL</a> (to load GIF images) <br>
+- <a href="http://tensorflow.org">tensorflow-gpu</a> (underlying network and CUDA implementation) <br>
+- <a href="http://tflearn.org">tflearn</a> (high level DNN that wraps tensorflow code) <br>
+- <a href="https://matplotlib.org/">matplotlib</a> (optional, used for testing and verification) <br>
+
+
+<a href="https://docs.python.org/3.6/library/argparse.html">argparse</a> is also used quite heavily to control program parameters. A full listing of parameters can be seen in <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py#L28">```rAInger_Util.get_arguments```</a>.
 
 <br>
 <b>1. Training</b>
 <br>
-The first thing we have to do is train our CNN. This is done with Python using the following libraries: <br>
-- numpy (array and math operations) <br>
-- opencv (for image IO and processing) <br>
-- tensorflow-gpu (underlying network and CUDA implementation) <br>
-- tflearn (high level DNN that wraps tensorflow code) <br>
-- matplotlib (optional, used for testing and verification) <br>
-
-All of these were readily available to me on pip, so getting this code up and running should be straightforward. The data used to train the network was obtained from <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> as a part of their Dogs vs. Cats challenge. 
+The first thing we have to do is train our CNN. The data used to train the network was obtained from <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> as a part of their Dogs vs. Cats challenge. Because the training step is computationally intense I chose to run it on my desktop computer which has an Nvidia 980 Ti graphics card. Once the network was trained I was able to save it to a file and load it pre-trained on the Jetson. 
 <br>
 
-Because the training step is computationally intense I chose to run it on my desktop computer which has an Nvidia 980 Ti graphics card. Once the network was trained I was able to save it to a file and load it pre-trained on the Jetson. 
+The training algorithm works by splitting the kaggle data set into two parts - one we use to train and one we use to validate. There are 25000 kaggle images - we use 500 as a validation set and train on the remaining 24500. By iteratively changing the network so as to match the training set with the validation set our network gradually  becomes more accurate. Information output by tflearn gives us an indication of how accurate our net is - after running it with our default parameters (specified in <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py#L28">```rAInger_Util.get_arguments```</a>) we get this result:
+
+```
+| Adam | epoch: 010 | loss: 0.33058 - acc: 0.8508 | val_loss: 0.55176 - val_acc: 0.7860 -- iter: 24500/24500
+```
+Indicating an accuracy of 85.08% - not too bad!
 
 <br>
 <b>2. Prediction</b>
@@ -125,3 +125,17 @@ def send_lora_data(data):
 ```
 
 The data variable, if it is a ```bytes``` or ```bytearray``` type, will be converted to a ```std::vector<char>``` and used by the C++ code in the ```send_loro_data``` function. In this way we can string together a bytearray of what we've seen and send it over the antenna. 
+
+<br>
+<b>4. Acknowledgements</b>
+<br>
+
+- <a href="https://medium.com/">Medium</a> for the tutorial upon which this work is based:<br>
+https://medium.com/@curiousily/tensorflow-for-hackers-part-iii-convolutional-neural-networks-c077618e590b
+- <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> for the training data set
+- The motion detector class using logic gleaned from this tutorial:<br>
+https://www.pyimagesearch.com/2015/05/25/basic-motion-detection-and-tracking-with-python-and-opencv/
+- Kurt Keville for loaning me one of his Jetson TX2s as well as the LoRaWAN antenna and guidance. 
+- <a href="https://github.com/mirakonta/lora_gateway">mirakonta</a> for libloragw
+- <a href="https://www.humblebundle.com/">Humble Bundle</a> for giving out Sony Vegas for a very low price - without it I would've struggled to make the video!
+- Thanks as well to <a href="https://github.com/amitmerchant1990/electron-markdownify">markdownify</a>, which I'm using right now to write this readme. 
