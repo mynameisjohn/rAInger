@@ -58,15 +58,11 @@ We run the prediction code on live input. The code uses a simple OpenCV motion d
 
 In the field the input will be coming from a camera, but for testing purposes I optionally allow reading a <a href="https://giphy.com/gifs/cat-moment-remember-8vQSQ3cNXuDGo">.GIF file</a> as input. 
 
-<h1 align="center">
 <img src="https://media.giphy.com/media/1wpxEWMljk7cv6nA96/giphy.gif" width="400" height="400"/>
-</h1>
 
 The rectangles you see are the areas in which motion was detected. We take motion as a trigger to start running images through the prediction network - while motion occurs we find the image with the strongest (in this case, which image is the most "cat or dog"-like). That strength gets returned to us as a 2-element array - the first element is how certain we are it's a cat, and the second how certain we are it's a dog. We want the image with the maximum element - we don't care if it's the first of the second, just so long as it's the max. That gets us this image:
 
-<h1 align="center">
 <img src="https://i.imgur.com/pNTmU5Y.png" width="400" height="400"/>
-</h1>
 
 The vector we're returned is ```[1.3075967,  -1.1696696]```. Adding 'softmax' layer to our network ensures the values sum to 1, giving us something like a percent certainty:  ```[0.9225327  0.07746734]```. Given that this is the strongest prediction we got during the motion window, we can say we're about 92% certain there's a cat in front of us (it must be that itty bitty nose!)
 
