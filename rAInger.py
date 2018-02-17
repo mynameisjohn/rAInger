@@ -59,8 +59,11 @@ if args.clean_images:
     rAI.rmFile(os.path.join(args.train_dir, args.train_data_file))
     rAI.rmFile(os.path.join(args.test_dir, args.test_data_file))
 if args.clean_model:
-    if args.model_file in set(os.listdir(os.getcwd())):
-        rAI.rmFile(args.model_file)
+    for file in os.listdir(os.getcwd()):
+        # the model file starts with our model name, but has a suffix
+        if file.startswith(args.model_file):
+            rAI.rmFile(file)
+            break
 
 # Try loading a cached model from disk
 try:
