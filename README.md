@@ -24,21 +24,21 @@ __ 0. File Index __
 <br>
 There are three source files in this repository
 <br>
-- rAInger.py - the main script, which runs the code that trains the network and uses it to analyze images
-- rAInger_Util.py - an auxilliary script where most of the functions used in rAInger.py are implemented
-- rAInger_pyl.cpp - A C++ source file that communicates with an onboard radio to transmit analysis data
+- rAInger.py - the main script, which runs the code that trains the network and uses it to analyze images <br>
+- rAInger_Util.py - an auxilliary script where most of the functions used in rAInger.py are implemented <br>
+- rAInger_pyl.cpp - A C++ source file that communicates with an onboard radio to transmit analysis data <br>
 
 Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
 
 <br>
 __ 1. Training __
 <br>
-The first thing we have to do is train our CNN. This is done with Python using the following libraries:
-- numpy (array and math operations)
-- opencv (for image IO and processing)
-- tensorflow-gpu (underlying network and CUDA implementation)
-- tflearn (high level DNN that wraps tensorflow code)
-- matplotlib (optional, used for testing and verification)
+The first thing we have to do is train our CNN. This is done with Python using the following libraries: <br>
+- numpy (array and math operations) <br>
+- opencv (for image IO and processing) <br>
+- tensorflow-gpu (underlying network and CUDA implementation) <br>
+- tflearn (high level DNN that wraps tensorflow code) <br>
+- matplotlib (optional, used for testing and verification) <br>
 
 All of these were readily available to me on pip, so getting this code up and running should be straightforward. The data used to train the network was obtained from <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> as a part of their Dogs vs. Cats challenge. 
 <br>
