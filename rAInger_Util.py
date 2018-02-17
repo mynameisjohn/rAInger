@@ -43,16 +43,16 @@ def get_arguments():
     parser.add_argument('--filter_size', type=int, default=5, help='The size of the convolution filters used')
     parser.add_argument('--num_neurons', type=int, default=1024, help='The count of fully connected neurons')
     parser.add_argument('--learn_rate', type=float, default=1e-3, help='Learn Rate of training algorithm')
-    parser.add_argument('--n_epoch', type=int, default=10, help='Learn Rate')
+    parser.add_argument('--n_epoch', type=int, default=10, help='The number of epochs we train the network for')
     parser.add_argument('--model_file', type=str, help='The cached model file')
 
     # Clean cached files
-    parser.add_argument('-ci', '--clean_images', type=bool, default=False, help='Delete any cached data files')
-    parser.add_argument('-cm', '--clean_model', type=bool, default=False, help='Delete any cached data files')
+    parser.add_argument('-ci', '--clean_images', type=bool, default=False, help='Delete any cached data image data')
+    parser.add_argument('-cm', '--clean_model', type=bool, default=False, help='Delete any cached data model data')
 
     # Decision threshold
     # For the live camera mode, if the prediction value exceeds this threshold then it's a match
-    parser.add_argument('-thresh', type=float, default=1.)
+    parser.add_argument('-thresh', type=float, default=1., help='The recognition threshold of our network')
 
     # Camera mode
     # if this is on, opencv is used to open the default camera. 
@@ -65,9 +65,9 @@ def get_arguments():
     # Instead of using the camera, use PIL to load a .GIF file
     # (i'm using this one https://giphy.com/gifs/cat-moment-remember-8vQSQ3cNXuDGo)
     # This will be used if not None before checking camera
-    parser.add_argument('--gif', type=str, help='Use camera as prediction input', default='cat.gif')
+    parser.add_argument('--gif', type=str, help='Use a GIF file as prediction input')
     
-    parser.add_argument('--motion', type=bool, default=True, help='Require motion for camera prediction')
+    parser.add_argument('--motion', type=bool, default=False, help='Require motion for camera prediction')
     parser.add_argument('--motion_window', type=float, default=40., help="Duration in seconds of our motion detection window")
     parser.add_argument('--min_detect', type=int, default=500, help="minimum motion detection area size")
 
