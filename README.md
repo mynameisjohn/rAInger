@@ -20,7 +20,7 @@ That's the theory, anyway. I don't have easy access to wildlife training set, so
 submission. Rather than repeat that information, I'll use this README to describe the actual implementation. 
 
 <br>
-__0. File Index__
+__ 0. File Index __
 <br>
 There are three source files in this repository
 <br>
@@ -31,7 +31,7 @@ There are three source files in this repository
 Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
 
 <br>
-__1. Training__
+__ 1. Training __
 <br>
 The first thing we have to do is train our CNN. This is done with Python using the following libraries:
 - numpy (array and math operations)
@@ -46,7 +46,7 @@ All of these were readily available to me on pip, so getting this code up and ru
 Because the training step is computationally intense I chose to run it on my desktop computer which has an Nvidia 980 Ti graphics card. Once the network was trained I was able to save it to a file and load it pre-trained on the Jetson. 
 
 <br>
-__2. Prediction__
+__ 2. Prediction __
 <br>
 Once the network is trained we can use it to analyze the content of images. Because it was trained on cats and dogs that's what it can recognize, but with a more diverse training set it could be used to analyze images of other types of wildlife (or anything, really. )
 <br>
@@ -67,7 +67,7 @@ The vector we're returned is ```[1.3075967,  -1.1696696]```. Adding 'softmax' la
 The reason we choose not to use the softmax layer is that we can't always be certain that what triggered the motion is something we recognize. If, for example a hamster were to cross in front of the camera, the softmax layer would still feel certain that it was either a cat. This is useful while training because we know we're feeding it something we'll recognize, but in the wild we want to know if it's something we don't recognize. 
 
 <br>
-__3. Communication__
+__ 3. Communication __
 <br>
 
 Now that we've figured we've seen something, we've got to send it over to our "central database". Admittedly this is an abstract concept for the time being, but what we can do is transmit some data over a LoRaWAN antenna to some remote gateway. The easiest way I know of doing this is using the <a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> library (libloragw). This kind of thing could be implemented in Python, but I honestly don't trust myself to do it on such short notice. 
