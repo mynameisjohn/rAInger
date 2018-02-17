@@ -63,15 +63,15 @@ In the field the input will be coming from a camera, but for testing purposes I 
 
 <img src="https://media.giphy.com/media/1wpxEWMljk7cv6nA96/giphy.gif" width="400" height="400"/>
 
-The rectangles you see are the areas in which motion was detected. We take motion as a trigger to start running images through the prediction network - while motion occurs we find the image with the strongest (in this case, which image is the most "cat or dog"-like). That strength gets returned to us as a 2-element array - the first element is how certain we are it's a cat, and the second how certain we are it's a dog. We want the image with the maximum element - we don't care if it's the first of the second, just so long as it's the max. That gets us this image:
+The rectangles you see are the areas in which motion was detected. We take motion as a trigger to start running images through the prediction network - while motion occurs we find the image with the strongest prediction(in this case, which image is the most "cat or dog"-like). That strength gets returned to us as a 2-element array - the first element is how certain we are it's a cat, and the second how certain we are it's a dog. We want the image with the maximum element - we don't care if it's the first of the second, just so long as it's the max. That gets us this image:
 
 <img src="https://i.imgur.com/pNTmU5Y.png" width="400" height="400"/>
 
 The vector we're returned is ```[1.3075967,  -1.1696696]```. Adding 'softmax' layer to our network ensures the values sum to 1, giving us something like a percent certainty:  ```[0.9225327  0.07746734]```. Given that this is the strongest prediction we got during the motion window, we can say we're about 92% certain there's a cat in front of us (it must be that itty bitty nose!)
 
-The reason we choose not to use the softmax layer is that we can't always be certain that what triggered the motion is something we recognize. If, for example a hamster were to cross in front of the camera, the softmax layer would still feel certain that it was either a cat. This is useful while training because we know we're feeding it something we'll recognize, but in the wild we want to know if it's something we don't recognize. 
+The reason we choose not to use the softmax layer is that we can't always be certain that what triggered the motion is something we recognize. If, for example a hamster were to cross in front of the camera, the softmax layer would still feel certain that it was either a cat or a dog. This is useful while training because we know we're feeding it something we'll recognize, but in the wild we want to know if it's something we don't recognize. 
 
-For this reason we use a <a href="http://tflearn.org/activations/#softmax">softmax</a> layer and a regression when training so as to reach an accurate model more quickly, but in the wild we use either a <a href="http://tflearn.org/activations/#linear">linear</a> or <a href="http://tflearn.org/activations/#relu">rectified linear</a> layer to avoid classifying junk as something we know. 
+For this reason we use a <a href="http://tflearn.org/activations/#softmax">softmax</a> layer and a <a href="http://tflearn.org/layers/estimator/#regression">regression</a> when training so as to reach an accurate model more quickly, but in the wild we use either a <a href="http://tflearn.org/activations/#linear">linear</a> or <a href="http://tflearn.org/activations/#relu">rectified linear</a> layer to avoid classifying junk as something we know. 
 
 ```Python
 # Use a softmax layer when training because we can be certain the input is either a cat or a dog
