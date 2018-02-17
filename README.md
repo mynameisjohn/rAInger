@@ -16,11 +16,13 @@ An autonomous wildlife camera <br>
 
 The goal of this project is to design a program that enables an Nvidia Jetson computer equipped with a camera to autonomously capture and analyze pictures.  These pictures are fed to a convolutional neural network (CNN) trained to recognized various types of animals, allowing the Jetson to independently track wildlife in the field. 
 
+[![rAInger submission video](https://img.youtube.com/vi/ZWR8u-FF0C0/0.jpg)](https://www.youtube.com/watch?v=ZWR8u-FF0C0)
+
 That's the theory, anyway. I don't have easy access to wildlife training set, so my networks are trained on cats and dogs. The high level purpose and design of this program is described further this short video, which I've included as part of my 
 submission. Rather than repeat that information, I'll use this README to describe the actual implementation. 
 
 <br>
-__ 0. File Index __
+<b>0. File Index</b>
 <br>
 There are three source files in this repository
 <br>
@@ -31,7 +33,7 @@ There are three source files in this repository
 Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
 
 <br>
-__ 1. Training __
+<b>1. Training</b>
 <br>
 The first thing we have to do is train our CNN. This is done with Python using the following libraries: <br>
 - numpy (array and math operations) <br>
@@ -46,7 +48,7 @@ All of these were readily available to me on pip, so getting this code up and ru
 Because the training step is computationally intense I chose to run it on my desktop computer which has an Nvidia 980 Ti graphics card. Once the network was trained I was able to save it to a file and load it pre-trained on the Jetson. 
 
 <br>
-__ 2. Prediction __
+<b>2. Prediction</b>
 <br>
 Once the network is trained we can use it to analyze the content of images. Because it was trained on cats and dogs that's what it can recognize, but with a more diverse training set it could be used to analyze images of other types of wildlife (or anything, really. )
 <br>
@@ -56,18 +58,33 @@ We run the prediction code on live input. The code uses a simple OpenCV motion d
 
 In the field the input will be coming from a camera, but for testing purposes I optionally allow reading a <a href="https://giphy.com/gifs/cat-moment-remember-8vQSQ3cNXuDGo">.GIF file</a> as input. 
 
+<h1 align="center">
 <img src="https://media.giphy.com/media/1wpxEWMljk7cv6nA96/giphy.gif" width="400" height="400"/>
+</h1>
 
 The rectangles you see are the areas in which motion was detected. We take motion as a trigger to start running images through the prediction network - while motion occurs we find the image with the strongest (in this case, which image is the most "cat or dog"-like). That strength gets returned to us as a 2-element array - the first element is how certain we are it's a cat, and the second how certain we are it's a dog. We want the image with the maximum element - we don't care if it's the first of the second, just so long as it's the max. That gets us this image:
 
+<h1 align="center">
 <img src="https://i.imgur.com/pNTmU5Y.png" width="400" height="400"/>
+</h1>
 
 The vector we're returned is ```[1.3075967,  -1.1696696]```. Adding 'softmax' layer to our network ensures the values sum to 1, giving us something like a percent certainty:  ```[0.9225327  0.07746734]```. Given that this is the strongest prediction we got during the motion window, we can say we're about 92% certain there's a cat in front of us (it must be that itty bitty nose!)
 
 The reason we choose not to use the softmax layer is that we can't always be certain that what triggered the motion is something we recognize. If, for example a hamster were to cross in front of the camera, the softmax layer would still feel certain that it was either a cat. This is useful while training because we know we're feeding it something we'll recognize, but in the wild we want to know if it's something we don't recognize. 
 
+For this reason we use a <a href="http://tflearn.org/activations/#softmax">softmax</a> layer and a regression when training so as to reach an accurate model more quickly, but in the wild we use either a <a href="http://tflearn.org/activations/#linear">linear</a> or <a href="http://tflearn.org/activations/#relu">rectified linear</a> layer to avoid classifying junk as something we know. 
+
+```Python
+# Use a softmax layer when training because we can be certain the input is either a cat or a dog
+if bTrain:
+    convnet = fully_connected(convnet, 2, activation='softmax')
+# Otherwise use a rectified linear layer to force unlikely results to zero
+else:
+    convnet = fully_connected(convnet, 2, activation='relu')
+```
+
 <br>
-__ 3. Communication __
+<b>3. Communication</b>
 <br>
 
 Now that we've figured we've seen something, we've got to send it over to our "central database". Admittedly this is an abstract concept for the time being, but what we can do is transmit some data over a LoRaWAN antenna to some remote gateway. The easiest way I know of doing this is using the <a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> library (libloragw). This kind of thing could be implemented in Python, but I honestly don't trust myself to do it on such short notice. 
@@ -103,6 +120,8 @@ pylAddFnToMod( pLLGWDef, send_loro_data );
 and calling it from Python
 
 ```Python
+import pylLoRaWAN
+
 def send_lora_data(data):
     if not (isinstance(data, bytes) or isinstance(data, bytearray)):
         raise RuntimeError('We can only send bytes over LoRaWAN')
