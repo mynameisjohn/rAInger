@@ -2,3 +2,6 @@
 	path = Pyliaison
 	url = https://github.com/mynameisjohn/Pyliaison
 	branch = master
+[submodule "lora_gateway"]
+	path = lora_gateway
+	url = https://github.com/mirakonta/lora_gateway
