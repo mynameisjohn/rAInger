@@ -13,11 +13,12 @@ submission. Rather than repeat that information, I'll use this README to describ
 <br>
 <b>0. File Index and Libraries</b>
 <br>
+
 There are three source files in this repository
 <br>
-- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger.py">rAInger.py</a> - the main script, which runs the code that trains the network and uses it to analyze images <br>
-- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py">rAInger_Util.py</a> - an auxilliary script where most of the functions used in rAInger.py are implemented <br>
-- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_pyl.cpp">rAInger_pyl.cpp</a> - A C++ source file that communicates with an onboard radio to transmit analysis data <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger.py">rAInger.py</a>: the main script, which runs the code that trains the network and uses it to analyze images <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py">rAInger_Util.py</a>: an auxilliary script where most of the functions used in rAInger.py are implemented <br>
+- <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_pyl.cpp">rAInger_pyl.cpp</a>: A C++ source file that communicates with an onboard radio to transmit analysis data <br>
 
 Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
 <br>
@@ -37,6 +38,7 @@ The python code uses the following libraries
 <br>
 <b>1. Training</b>
 <br>
+
 The first thing we have to do is train our CNN. The data used to train the network was obtained from <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> as a part of their Dogs vs. Cats challenge. Because the training step is computationally intense I chose to run it on my desktop computer which has an Nvidia 980 Ti graphics card. Once the network was trained I was able to save it to a file and load it pre-trained on the Jetson. 
 <br>
 
@@ -50,6 +52,7 @@ Indicating an accuracy of 85.08% - not too bad!
 <br>
 <b>2. Prediction</b>
 <br>
+
 Once the network is trained we can use it to analyze the content of images. Because it was trained on cats and dogs that's what it can recognize, but with a more diverse training set it could be used to analyze images of other types of wildlife (or anything, really. )
 <br>
 
@@ -130,11 +133,9 @@ The data variable, if it is a ```bytes``` or ```bytearray``` type, will be conve
 <b>4. Acknowledgements</b>
 <br>
 
-- <a href="https://medium.com/">Medium</a> for the tutorial upon which this work is based:<br>
-https://medium.com/@curiousily/tensorflow-for-hackers-part-iii-convolutional-neural-networks-c077618e590b
+- <a href="https://medium.com/@curiousily/tensorflow-for-hackers-part-iii-convolutional-neural-networks-c077618e590b">Medium</a> for the tutorial upon which this work is based
 - <a href="https://www.kaggle.com/c/dogs-vs-cats/data">kaggle</a> for the training data set
-- The motion detector class using logic gleaned from this tutorial:<br>
-https://www.pyimagesearch.com/2015/05/25/basic-motion-detection-and-tracking-with-python-and-opencv/
+- <a href="https://www.pyimagesearch.com/2015/05/25/basic-motion-detection-and-tracking-with-python-and-opencv/">PyImageSeach</a> for the motion detecion logic
 - Kurt Keville for loaning me one of his Jetson TX2s as well as the LoRaWAN antenna and guidance. 
 - <a href="https://github.com/mirakonta/lora_gateway">mirakonta</a> for libloragw
 - <a href="https://www.humblebundle.com/">Humble Bundle</a> for giving out Sony Vegas for a very low price - without it I would've struggled to make the video!
