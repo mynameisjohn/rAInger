@@ -20,7 +20,7 @@ There are three source files in this repository
 - <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_Util.py">rAInger_Util.py</a>: an auxilliary script where most of the functions used in rAInger.py are implemented <br>
 - <a href="https://github.com/mynameisjohn/rAInger/blob/master/rAInger_pyl.cpp">rAInger_pyl.cpp</a>: A C++ source file that communicates with an onboard radio to transmit analysis data <br>
 
-Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. 
+Additionally there are two subrepositories (<a href="https://github.com/mirakonta/lora_gateway">lora\_gateway</a> and <a href="https://github.com/mynameisjohn/PyLiaison">PyLiaison</a>). The former is used for radio communication, and the latter allows the python code to communicate with C++ code. Pyliaison should behave nicely with CMake. There is no CMakeLists.txt for libloragw, but if you follow the instructions in <a href="https://github.com/mirakonta/lora_gateway/blob/master/libloragw/install_ftdi.txt">```lora_gateway/libloragw/install_ftdi.txt```</a> and build within that directory you should be good to go. 
 <br>
 
 The python code uses the following libraries
