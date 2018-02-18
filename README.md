@@ -130,7 +130,13 @@ def send_lora_data(data):
 The data variable, if it is a ```bytes``` or ```bytearray``` type, will be converted to a ```std::vector<char>``` and used by the C++ code in the ```send_loro_data``` function. In this way we can string together a bytearray of what we've seen and send it over the antenna. 
 
 <br>
-<b>4. Acknowledgements</b>
+<b>4. Conclusion</b>
+<br>
+
+Hopefully the code here will demonstrate a working proof of concept for what rAInger could be. I hope you consider it a valid submission to the Jetson Developer Challenge, and thank you for your time. 
+
+<br>
+<b>5. Acknowledgements</b>
 <br>
 
 - <a href="https://medium.com/@curiousily/tensorflow-for-hackers-part-iii-convolutional-neural-networks-c077618e590b">Medium</a> for the tutorial upon which this work is based
